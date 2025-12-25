@@ -37,6 +37,7 @@ a:hover { text-decoration: underline; }
   border-bottom: 1px solid var(--border);
   position: sticky; top: 0;
   backdrop-filter: blur(10px);
+  flex-wrap: wrap;
 }
 
 .brand { font-weight: 800; color: var(--text); letter-spacing: 0.2px; }
@@ -122,6 +123,9 @@ table { width: 100%; border-collapse: collapse; }
 th, td { padding: 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
 th { text-align: left; color: var(--muted); font-weight: 600; }
 
+.table-wrap { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.table-wrap table { min-width: 720px; }
+
 .pagination { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .pagination a, .pagination span {
   padding: 6px 10px; border: 1px solid var(--border); border-radius: 10px;
@@ -206,4 +210,17 @@ pre {
 @keyframes pulse {
   0%, 100% { transform: scale(1); opacity: 0.95; }
   50% { transform: scale(1.12); opacity: 1; }
+}
+
+@media (max-width: 640px) {
+  .container { padding: 12px; }
+  .nav { padding: 10px 12px; gap: 10px; }
+  .brand { font-size: 14px; }
+  .row { gap: 10px; }
+  .row > * { min-width: 0; flex: 1 1 100%; }
+  input, button, select, textarea { width: 100%; }
+  th, td { padding: 8px; }
+  pre { max-height: 320px; }
+  .modal-backdrop { padding: 18px 10px; }
+  .modal { width: 96vw; max-height: 92vh; }
 }
