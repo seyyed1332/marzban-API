@@ -21,7 +21,7 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
-from telegram import Bot
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.constants import ParseMode
 
 from .db import AppUser, Database, Panel
@@ -130,6 +130,7 @@ async def _migrate_legacy_schedule_message_templates(db: Database) -> None:
             panel_id=panel_id,
             message_template=DEFAULT_SCHEDULE_MESSAGE_TEMPLATE,
             selected_link_keys=cfg.selected_link_keys or None,
+            button_templates=cfg.button_templates or None,
         )
 
 
@@ -191,6 +192,12 @@ DEFAULT_SCHEDULE_MESSAGE_TEMPLATE = """✅ *ساب ریست شد*
 🔗 *کانفیگ‌ها ({{links_count}}):*
 {{links}}
 """
+
+DEFAULT_SCHEDULE_BUTTON_TEMPLATES: list[str] = [
+    "📅 تاریخ شمسی: {{date_jalali}}",
+    "📊 باقی‌مانده: {{traffic_remaining_human}}",
+    "⏱ ریست بعدی: {{next_reset_at}}",
+]
 
 TEMPLATE_VARS = [
     ("username", "نام کاربری"),
@@ -291,9 +298,56 @@ def _chunk_text(text: str, *, max_len: int = 3800) -> list[str]:
     return [p for p in parts if p.strip()]
 
 
-async def _send_telegram_text(bot: Bot, *, chat_id: int, text: str) -> None:
-    for part in _chunk_text(text):
-        await bot.send_message(chat_id=chat_id, text=part, parse_mode=ParseMode.MARKDOWN)
+def _compact_one_line(text: str) -> str:
+    return " ".join((text or "").split())
+
+
+def _truncate_telegram_button_text(text: str, *, max_len: int = 64) -> str:
+    value = _compact_one_line(text).replace("`", "")
+    if len(value) <= max_len:
+        return value
+    if max_len <= 1:
+        return value[:max_len]
+    return value[: max_len - 1].rstrip() + "…"
+
+
+def _build_telegram_info_buttons(
+    templates: list[str] | None,
+    ctx: dict[str, Any],
+) -> InlineKeyboardMarkup | None:
+    templates = list(templates or [])
+    if not templates:
+        templates = list(DEFAULT_SCHEDULE_BUTTON_TEMPLATES)
+
+    rows: list[list[InlineKeyboardButton]] = []
+    for idx, tpl in enumerate(templates):
+        rendered = _render_message_template(str(tpl or ""), ctx).strip()
+        rendered = _truncate_telegram_button_text(rendered, max_len=64)
+        if not rendered:
+            continue
+        rows.append([InlineKeyboardButton(text=rendered, callback_data=f"info:{idx}")])
+
+    if not rows:
+        return None
+    return InlineKeyboardMarkup(rows)
+
+
+async def _send_telegram_text(
+    bot: Bot,
+    *,
+    chat_id: int,
+    text: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+) -> None:
+    parts = _chunk_text(text)
+    last_idx = max(0, len(parts) - 1)
+    for idx, part in enumerate(parts):
+        await bot.send_message(
+            chat_id=chat_id,
+            text=part,
+            parse_mode=ParseMode.MARKDOWN,
+            reply_markup=(reply_markup if idx == last_idx else None),
+        )
 
 
 def _format_links_markdown(links: list[str]) -> str:
@@ -682,6 +736,7 @@ async def _scheduler_tick(app: FastAPI) -> None:
             sched_cfg = await db.get_schedule_config(username=sched.username, panel_id=panel.id)
             selected_keys = sched_cfg.selected_link_keys if sched_cfg is not None else []
             message_template = sched_cfg.message_template if sched_cfg is not None else None
+            button_templates = sched_cfg.button_templates if sched_cfg is not None else None
 
             # Best-effort migration: if the stored selection used the old (unstable) keying,
             # rewrite it to the new stable keys before we revoke (since revoke_sub can change
@@ -698,6 +753,7 @@ async def _scheduler_tick(app: FastAPI) -> None:
                             panel_id=panel.id,
                             message_template=message_template,
                             selected_link_keys=migrated,
+                            button_templates=button_templates,
                         )
                         selected_keys = migrated
                 except Exception:
@@ -777,7 +833,8 @@ async def _scheduler_tick(app: FastAPI) -> None:
                 reason=f"scheduled revoke_sub (panel: {panel.name})",
             )
 
-            await _send_telegram_text(bot, chat_id=int(chat_id), text=message)
+            reply_markup = _build_telegram_info_buttons(button_templates, ctx)
+            await _send_telegram_text(bot, chat_id=int(chat_id), text=message, reply_markup=reply_markup)
 
             await db.mark_schedule_result(
                 username=sched.username,
@@ -862,6 +919,14 @@ async def _telegram_handle_command(
 
 
 async def _telegram_handle_update(*, db: Database, cfg: Any, bot: Bot, update: dict[str, Any]) -> bool:
+    cbq = update.get("callback_query") or {}
+    if isinstance(cbq, dict) and cbq.get("id"):
+        try:
+            await bot.answer_callback_query(callback_query_id=str(cbq.get("id")))
+        except Exception:
+            pass
+        return True
+
     msg = (update.get("message") or {})
     text = (msg.get("text") or "").strip()
     chat = msg.get("chat") or {}
@@ -903,7 +968,7 @@ async def _telegram_poll_tick(app: FastAPI) -> int:
             offset = int(offset_raw)
 
         try:
-            updates = await bot.get_updates(offset=offset, timeout=20, allowed_updates=["message"])
+            updates = await bot.get_updates(offset=offset, timeout=20, allowed_updates=["message", "callback_query"])
         except Exception as e:
             await db.set_kv("telegram_polling_last_error", f"{type(e).__name__}: {str(e)[:200]}")
             return 0
@@ -1293,6 +1358,7 @@ def create_app(settings: Settings) -> FastAPI:
         schedule_cfg = await db.get_schedule_config(username=username, panel_id=panel.id)
         schedule_template = (schedule_cfg.message_template if schedule_cfg is not None else None) or DEFAULT_SCHEDULE_MESSAGE_TEMPLATE
         schedule_selected_keys = schedule_cfg.selected_link_keys if schedule_cfg is not None else []
+        schedule_button_templates = (schedule_cfg.button_templates if schedule_cfg is not None else []) or DEFAULT_SCHEDULE_BUTTON_TEMPLATES
         if schedule_cfg is not None and schedule_selected_keys:
             migrated = _migrate_selected_link_keys_to_stable(schedule_selected_keys, link_items)
             if migrated and migrated != schedule_selected_keys:
@@ -1301,6 +1367,7 @@ def create_app(settings: Settings) -> FastAPI:
                     panel_id=panel.id,
                     message_template=schedule_cfg.message_template,
                     selected_link_keys=migrated,
+                    button_templates=schedule_cfg.button_templates,
                 )
                 schedule_selected_keys = migrated
 
@@ -1326,6 +1393,7 @@ def create_app(settings: Settings) -> FastAPI:
                 "next_reset_dt": next_reset_dt,
                 "schedule_template": schedule_template,
                 "schedule_selected_keys": schedule_selected_keys,
+                "schedule_button_templates": schedule_button_templates,
                 "template_vars": TEMPLATE_VARS,
                 "open_cfg": int(open_cfg or 0),
                 "msg": msg,
@@ -1458,6 +1526,7 @@ def create_app(settings: Settings) -> FastAPI:
         username: str,
         message_template: str = Form(""),
         link_keys: list[str] = Form([]),
+        button_templates: list[str] = Form([]),
     ) -> RedirectResponse:
         user = await _require_user(request)
         db = await _get_db(request)
@@ -1475,11 +1544,15 @@ def create_app(settings: Settings) -> FastAPI:
             seen.add(k)
             unique_keys.append(k)
 
+        raw_buttons = [str(x or "") for x in (button_templates or [])]
+        button_tpls = [x.strip() for x in raw_buttons[:3]] if raw_buttons else None
+
         await db.set_schedule_config(
             username=username,
             panel_id=panel.id,
             message_template=template,
             selected_link_keys=unique_keys or None,
+            button_templates=button_tpls,
         )
         return _redirect_msg(f"/users/{username}", "Schedule config saved")
 
@@ -1489,6 +1562,7 @@ def create_app(settings: Settings) -> FastAPI:
         username: str,
         message_template: str = Form(""),
         link_keys: list[str] = Form([]),
+        button_templates: list[str] = Form([]),
     ) -> RedirectResponse:
         user = await _require_user(request)
         db = await _get_db(request)
@@ -1580,12 +1654,16 @@ def create_app(settings: Settings) -> FastAPI:
             )
         message = "🧪 TEST پیام (preview)\n\n" + message
 
+        raw_buttons = [str(x or "") for x in (button_templates or [])]
+        button_tpls = [x.strip() for x in raw_buttons[:3]] if raw_buttons else None
+        reply_markup = _build_telegram_info_buttons(button_tpls, ctx)
+
         bot = Bot(token=telegram_cfg.bot_token)
         sent = 0
         failed = 0
         for chat_id in admins:
             try:
-                await _send_telegram_text(bot, chat_id=int(chat_id), text=message)
+                await _send_telegram_text(bot, chat_id=int(chat_id), text=message, reply_markup=reply_markup)
                 sent += 1
             except Exception:
                 failed += 1

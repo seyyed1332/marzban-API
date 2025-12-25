@@ -122,6 +122,7 @@
       <div class="tabs" style="margin-top: 12px;">
         <button class="tab active" type="button" data-tab="msg">Message</button>
         <button class="tab" type="button" data-tab="links">VLESS links</button>
+        <button class="tab" type="button" data-tab="buttons">Buttons</button>
         <div class="spacer"></div>
         {% if schedule and schedule.enabled %}
           <span class="pill ok">enabled</span>
@@ -159,6 +160,16 @@
               <div class="muted">No VLESS links found.</div>
             {% endif %}
           </div>
+        </div>
+
+        <div class="tab-panel" data-tab-panel="buttons" style="display:none;">
+          <div class="muted">Telegram inline buttons (glass-style). One per row. You can use variables.</div>
+          <div class="glass-stack" style="margin-top: 10px;">
+            <input class="glass-input" name="button_templates" value="{{ schedule_button_templates[0] if schedule_button_templates|length > 0 else '' }}" placeholder="📅 تاریخ شمسی: {{date_jalali}}" />
+            <input class="glass-input" name="button_templates" value="{{ schedule_button_templates[1] if schedule_button_templates|length > 1 else '' }}" placeholder="📊 باقی‌مانده: {{traffic_remaining_human}}" />
+            <input class="glass-input" name="button_templates" value="{{ schedule_button_templates[2] if schedule_button_templates|length > 2 else '' }}" placeholder="⏱ ریست بعدی: {{next_reset_at}}" />
+          </div>
+          <div class="muted" style="margin-top: 10px;">Tip: leave a field empty to hide that button.</div>
         </div>
 
         <div class="row" style="margin-top: 12px;">

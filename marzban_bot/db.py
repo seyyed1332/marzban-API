@@ -64,6 +64,7 @@ class ScheduleConfig:
     username: str
     message_template: str | None
     selected_link_keys: list[str]
+    button_templates: list[str]
     updated_at: int
 
 
@@ -164,6 +165,7 @@ class Database:
               username TEXT NOT NULL,
               message_template TEXT,
               selected_link_keys TEXT,
+              button_templates TEXT,
               updated_at INTEGER NOT NULL,
               PRIMARY KEY(panel_id, username),
               FOREIGN KEY(panel_id) REFERENCES panels(id) ON DELETE CASCADE
@@ -173,6 +175,7 @@ class Database:
         await self.conn.commit()
 
         await self._ensure_interval_minutes()
+        await self._ensure_schedule_config_button_templates()
 
     async def _ensure_interval_minutes(self) -> None:
         if not await self._table_exists("schedules"):
@@ -186,6 +189,15 @@ class Database:
             return
         await self.conn.execute("ALTER TABLE schedules ADD COLUMN interval_minutes INTEGER;")
         await self.conn.execute("UPDATE schedules SET interval_minutes = interval_hours * 60 WHERE interval_minutes IS NULL;")
+        await self.conn.commit()
+
+    async def _ensure_schedule_config_button_templates(self) -> None:
+        if not await self._table_exists("schedule_configs"):
+            return
+        cols = await self._table_columns("schedule_configs")
+        if "button_templates" in cols:
+            return
+        await self.conn.execute("ALTER TABLE schedule_configs ADD COLUMN button_templates TEXT;")
         await self.conn.commit()
 
     async def _table_exists(self, name: str) -> bool:
@@ -720,7 +732,7 @@ class Database:
     async def get_schedule_config(self, *, username: str, panel_id: int = 1) -> ScheduleConfig | None:
         cur = await self.conn.execute(
             """
-            SELECT panel_id, username, message_template, selected_link_keys, updated_at
+            SELECT panel_id, username, message_template, selected_link_keys, button_templates, updated_at
             FROM schedule_configs
             WHERE panel_id=? AND username=?
             """,
@@ -740,11 +752,22 @@ class Database:
             except Exception:
                 selected = []
 
+        buttons_raw = None if row["button_templates"] is None else str(row["button_templates"])
+        buttons: list[str] = []
+        if buttons_raw:
+            try:
+                parsed = json.loads(buttons_raw)
+                if isinstance(parsed, list):
+                    buttons = [str(x or "").strip() for x in parsed]
+            except Exception:
+                buttons = []
+
         return ScheduleConfig(
             panel_id=int(row["panel_id"]),
             username=str(row["username"]),
             message_template=None if row["message_template"] is None else str(row["message_template"]),
             selected_link_keys=selected,
+            button_templates=buttons,
             updated_at=int(row["updated_at"]),
         )
 
@@ -755,22 +778,28 @@ class Database:
         panel_id: int,
         message_template: str | None,
         selected_link_keys: list[str] | None,
+        button_templates: list[str] | None,
     ) -> None:
         now = int(time.time())
         selected_json = None
         if selected_link_keys:
             selected_json = json.dumps(list(selected_link_keys), ensure_ascii=False)
 
+        buttons_json = None
+        if button_templates:
+            buttons_json = json.dumps(list(button_templates), ensure_ascii=False)
+
         await self.conn.execute(
             """
-            INSERT INTO schedule_configs(panel_id, username, message_template, selected_link_keys, updated_at)
-            VALUES(?, ?, ?, ?, ?)
+            INSERT INTO schedule_configs(panel_id, username, message_template, selected_link_keys, button_templates, updated_at)
+            VALUES(?, ?, ?, ?, ?, ?)
             ON CONFLICT(panel_id, username) DO UPDATE SET
               message_template=excluded.message_template,
               selected_link_keys=excluded.selected_link_keys,
+              button_templates=excluded.button_templates,
               updated_at=excluded.updated_at
             """,
-            (int(panel_id), username, message_template, selected_json, now),
+            (int(panel_id), username, message_template, selected_json, buttons_json, now),
         )
         await self.conn.commit()
 
