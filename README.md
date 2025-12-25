@@ -90,9 +90,9 @@ Notes:
 After pushing to GitHub, run this on your Ubuntu server:
 
 ```bash
-wget -qO- https://raw.githubusercontent.com/seyyed1332/Marzban-Auto-repost/main/scripts/install_ubuntu.sh | \
+wget -qO- https://raw.githubusercontent.com/seyyed1332/marzban-API/main/scripts/install_ubuntu.sh | \
   sudo bash -s -- \
-    --repo-url https://github.com/seyyed1332/Marzban-Auto-repost.git \
+    --repo-url https://github.com/seyyed1332/marzban-API.git \
     --host 0.0.0.0 \
     --port 8000
 ```
