@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="card">
+    <div style="font-weight: 800; font-size: 18px;">Schedules</div>
+    <div class="muted">Showing up to 200 items</div>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Panel</th>
+          <th>Username</th>
+          <th>Enabled</th>
+          <th>Interval (hh.mm)</th>
+          <th>Next</th>
+          <th>Last run</th>
+          <th>Last error</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for s in items %}
+          <tr>
+            <td class="muted">
+              {% set p = panel_map.get(s.panel_id) %}
+              {{ p.name if p else ("#" ~ s.panel_id) }}
+            </td>
+            <td><a href="/panels/select/{{ s.panel_id }}?next=/users/{{ s.username }}">{{ s.username }}</a></td>
+            <td>{% if s.enabled %}<span class="pill ok">on</span>{% else %}<span class="pill">off</span>{% endif %}</td>
+            <td>{{ format_interval(s.interval_minutes) }}</td>
+            <td>{{ format_dt(epoch_to_dt(s.next_run_at), tz_name) }}</td>
+            <td>
+              {% if s.last_run_at %}
+                {{ format_dt(epoch_to_dt(s.last_run_at), tz_name) }}
+              {% else %}
+                -
+              {% endif %}
+            </td>
+            <td class="muted">{{ s.last_error or "-" }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+{% endblock %}

@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="card">
+    <div style="font-weight: 800; font-size: 18px;">Telegram</div>
+    <div class="muted">Set bot token, admin user IDs, and webhook.</div>
+  </div>
+
+  <div class="card">
+    <form method="post" action="/telegram/save">
+      <div class="row">
+        <div>
+          <div class="muted">Bot token</div>
+          <input name="bot_token" value="{{ cfg.bot_token or '' }}" placeholder="123456:ABC..." />
+        </div>
+      </div>
+      <div class="row" style="margin-top: 10px;">
+        <div>
+          <div class="muted">Admin user IDs (comma-separated)</div>
+          <input name="admin_user_ids" value="{{ cfg.admin_user_ids or '' }}" placeholder="123456789,987654321" />
+        </div>
+      </div>
+      <div class="row" style="margin-top: 10px;">
+        <div>
+          <div class="muted">Webhook URL</div>
+          <input name="webhook_url" value="{{ cfg.webhook_url or '' }}" placeholder="https://your-domain.com{{ webhook_endpoint }}" />
+        </div>
+      </div>
+      <div class="row" style="margin-top: 14px;">
+        <button type="submit">Save</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <div style="font-weight: 800; font-size: 16px;">Local debug (no webhook)</div>
+    <div class="muted">برای تست روی لوکال، Polling رو روشن کنید و وبهوک لازم نیست.</div>
+    <div class="row" style="margin-top: 12px;">
+      <form method="post" action="/telegram/polling/enable">
+        <button type="submit">Enable polling</button>
+      </form>
+      <form method="post" action="/telegram/polling/disable">
+        <button class="btn-muted" type="submit">Disable</button>
+      </form>
+      <form method="post" action="/telegram/polling/poll-now">
+        <button class="btn-muted" type="submit">Poll now</button>
+      </form>
+      {% if polling_enabled %}
+        <span class="pill ok">polling on</span>
+      {% else %}
+        <span class="pill">polling off</span>
+      {% endif %}
+    </div>
+    <div class="muted" style="margin-top: 10px;">Commands: `/whoami` و `/start &lt;panel_id&gt;` (admin only)</div>
+    {% if polling_last_error %}
+      <pre>{{ polling_last_error }}</pre>
+    {% endif %}
+  </div>
+
+  <div class="card">
+    <div style="font-weight: 800; font-size: 16px;">Webhook actions</div>
+    <div class="row" style="margin-top: 12px;">
+      <form method="post" action="/telegram/set-webhook">
+        <button type="submit">Set webhook</button>
+      </form>
+      <form method="post" action="/telegram/delete-webhook">
+        <button class="btn-muted" type="submit">Delete webhook</button>
+      </form>
+      <span class="muted">Endpoint: {{ webhook_endpoint }}</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="font-weight: 800; font-size: 16px;">Webhook info</div>
+    <pre>{{ info | tojson(indent=2) if info else '-' }}</pre>
+    <div class="muted">Commands: `/whoami` and `/start &lt;panel_id&gt;` (admin only)</div>
+  </div>
+{% endblock %}

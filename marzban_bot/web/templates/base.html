@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="fa">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{{ title or "Marzban Panel Hub" }}</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <div class="nav">
+      <a class="brand" href="/">Marzban Panel Hub</a>
+
+      {% if user %}
+        <a href="/panels">Panels</a>
+        <a href="/users">Users</a>
+        <a href="/schedules">Schedules</a>
+        <a href="/telegram">Telegram</a>
+        <div class="spacer"></div>
+        {% if panel %}
+          <span class="pill">{{ panel.name }}</span>
+        {% endif %}
+        <span class="pill">{{ user.username }}</span>
+        <a class="pill" href="/logout">Logout</a>
+      {% else %}
+        <div class="spacer"></div>
+        <a href="/login">Login</a>
+        <a href="/signup">Sign up</a>
+      {% endif %}
+    </div>
+
+    <div class="container">
+      {% if msg %}
+        <div class="card">
+          <div class="muted">{{ msg }}</div>
+        </div>
+      {% endif %}
+      {% block content %}{% endblock %}
+    </div>
+    <script src="/static/app.js"></script>
+  </body>
+</html>

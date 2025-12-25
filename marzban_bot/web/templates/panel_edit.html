@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="card">
+    <div style="font-weight: 800; font-size: 18px;">Edit panel #{{ panel.id }}</div>
+    <div class="muted">Update API credentials, SSL, and default Telegram chat_id for scheduled reports.</div>
+  </div>
+
+  <div class="card">
+    <form method="post" action="/panels/{{ panel.id }}/update">
+      <div class="row">
+        <div>
+          <div class="muted">Name</div>
+          <input name="name" value="{{ panel.name }}" />
+        </div>
+        <div>
+          <div class="muted">Base URL</div>
+          <input name="base_url" value="{{ panel.base_url }}" />
+        </div>
+      </div>
+      <div class="row" style="margin-top: 10px;">
+        <div>
+          <div class="muted">Admin username</div>
+          <input name="admin_username" value="{{ panel.admin_username }}" />
+        </div>
+        <div>
+          <div class="muted">Admin password (leave empty to keep)</div>
+          <input name="admin_password" type="password" placeholder="********" />
+        </div>
+      </div>
+      <div class="row" style="margin-top: 10px;">
+        <div style="flex: 0 0 220px; min-width: 220px;">
+          <div class="muted">Verify SSL</div>
+          <select name="verify_ssl">
+            <option value="1" {% if panel.verify_ssl %}selected{% endif %}>on</option>
+            <option value="0" {% if not panel.verify_ssl %}selected{% endif %}>off</option>
+          </select>
+        </div>
+        <div style="flex: 0 0 260px; min-width: 260px;">
+          <div class="muted">Default chat_id</div>
+          <input name="default_chat_id" value="{{ panel.default_chat_id or '' }}" placeholder="123456789" />
+        </div>
+        <div style="flex: 0 0 160px; min-width: 160px;">
+          <div class="muted">&nbsp;</div>
+          <button type="submit">Save</button>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <div class="card">
+    <div class="muted">Tip: in Telegram send `/whoami` to your bot to get `chat_id`.</div>
+  </div>
+
+  <div class="card">
+    <form method="post" action="/panels/{{ panel.id }}/delete" onsubmit="return confirm('Delete panel?');">
+      <button class="btn-danger" type="submit">Delete panel</button>
+      <a class="pill" href="/panels">Back</a>
+    </form>
+  </div>
+{% endblock %}

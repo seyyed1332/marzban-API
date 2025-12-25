@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="card">
+    <div style="font-weight: 800; font-size: 18px;">Panels</div>
+    <div class="muted">Add multiple Marzban panels and switch between them.</div>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Base URL</th>
+          <th>SSL</th>
+          <th>Default chat_id</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in panels %}
+          <tr>
+            <td class="muted">#{{ p.id }}</td>
+            <td>
+              {% if active_panel_id and p.id == active_panel_id %}
+                <span class="pill ok">{{ p.name }}</span>
+              {% else %}
+                {{ p.name }}
+              {% endif %}
+            </td>
+            <td class="muted">{{ p.base_url }}</td>
+            <td>{% if p.verify_ssl %}<span class="pill ok">on</span>{% else %}<span class="pill">off</span>{% endif %}</td>
+            <td class="muted">{{ p.default_chat_id or "-" }}</td>
+            <td>
+              <a class="pill" href="/panels/select/{{ p.id }}">Select</a>
+              <a class="pill" href="/panels/{{ p.id }}">Edit</a>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="card">
+    <div style="font-weight: 800; font-size: 16px;">Add new panel</div>
+    <form method="post" action="/panels/new" style="margin-top: 12px;">
+      <div class="row">
+        <div>
+          <div class="muted">Name</div>
+          <input name="name" placeholder="My Panel" />
+        </div>
+        <div>
+          <div class="muted">Base URL (root)</div>
+          <input name="base_url" placeholder="https://panel.example.com یا https://panel.example.com/marzban" />
+          <div class="muted" style="margin-top: 6px; font-size: 12px;">Tip: اگر لینک /docs دارید، همونو بزنید (اتوماتیک درست میشه).</div>
+        </div>
+      </div>
+      <div class="row" style="margin-top: 10px;">
+        <div>
+          <div class="muted">Admin username</div>
+          <input name="admin_username" placeholder="admin" />
+        </div>
+        <div>
+          <div class="muted">Admin password</div>
+          <input name="admin_password" type="password" placeholder="********" />
+        </div>
+      </div>
+      <div class="row" style="margin-top: 10px;">
+        <div style="flex: 0 0 220px; min-width: 220px;">
+          <div class="muted">Verify SSL</div>
+          <select name="verify_ssl">
+            <option value="1" selected>on</option>
+            <option value="0">off</option>
+          </select>
+        </div>
+        <div style="flex: 0 0 160px; min-width: 160px;">
+          <div class="muted">&nbsp;</div>
+          <button type="submit">Add</button>
+        </div>
+      </div>
+    </form>
+  </div>
+{% endblock %}

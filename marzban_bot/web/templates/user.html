@@ -1,0 +1,213 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="card">
+    <div class="muted">Active panel</div>
+    <div class="row" style="margin-top: 10px;">
+      {% for p in panels %}
+        {% if panel and p.id == panel.id %}
+          <span class="pill ok">{{ p.name }}</span>
+        {% else %}
+          <a class="pill" href="/panels/select/{{ p.id }}">{{ p.name }}</a>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <div class="muted">Username</div>
+        <div style="font-size: 22px; font-weight: 800;">{{ api_user.username }}</div>
+      </div>
+      <div>
+        <div class="muted">Status</div>
+        <div>{{ api_user.status }}</div>
+      </div>
+      <div>
+        <div class="muted">Traffic</div>
+        <div>{{ format_bytes(api_user.used_traffic or 0) }} / {{ format_bytes(data_limit_display) }}</div>
+      </div>
+      <div>
+        <div class="muted">Expire</div>
+        <div>{{ format_dt(expire_dt, tz_name) }}</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="muted">Subscription URL</div>
+    <div style="word-break: break-word;">{{ api_user.subscription_url }}</div>
+    <div style="margin-top: 10px;" class="row">
+      <form method="post" action="/users/{{ api_user.username }}/revoke">
+        <button class="btn-danger" type="submit">Revoke sub (Reset UUID/Sub)</button>
+      </form>
+      <form method="post" action="/users/{{ api_user.username }}/reset-usage">
+        <button class="btn-muted" type="submit">Reset usage</button>
+      </form>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <div class="muted">Schedule</div>
+        {% if schedule and schedule.enabled %}
+          <div>
+            <span class="pill ok">enabled</span>
+            every <b>{{ format_interval(schedule.interval_minutes) }}</b> (hh.mm)
+          </div>
+          <div class="muted">Next: {{ format_dt(next_reset_dt, tz_name) }}</div>
+        {% elif schedule and not schedule.enabled %}
+          <div><span class="pill">disabled</span> (saved, but off)</div>
+        {% else %}
+          <div><span class="pill">-</span></div>
+        {% endif %}
+        {% if schedule and schedule.last_error %}
+          <div class="muted" style="margin-top: 6px;">Last error: {{ schedule.last_error }}</div>
+        {% endif %}
+      </div>
+
+      <div>
+        <div class="muted">Set schedule (hours.minutes)</div>
+        <form method="post" action="/users/{{ api_user.username }}/schedule" class="row">
+          <input name="interval" placeholder="7 یا 2.30" />
+          <button type="submit">Save</button>
+        </form>
+        <form method="post" action="/users/{{ api_user.username }}/unschedule" style="margin-top: 10px;">
+          <button class="btn-muted" type="submit">Disable</button>
+        </form>
+      </div>
+
+      <div>
+        <div class="muted">Chat binding</div>
+        <div class="muted">Panel default_chat_id: {{ panel.default_chat_id or "-" }}</div>
+        <div class="muted">User chat_id: {{ binding.chat_id if binding else "-" }}</div>
+        <form method="post" action="/users/{{ api_user.username }}/bind" class="row" style="margin-top: 10px;">
+          <input name="chat_id" placeholder="123456789" />
+          <button type="submit">Bind</button>
+        </form>
+        <form method="post" action="/users/{{ api_user.username }}/unbind" style="margin-top: 10px;">
+          <button class="btn-muted" type="submit">Unbind</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="muted">Resolved links ({{ resolved_links | length }})</div>
+    <div style="margin: 10px 0;">
+      <a class="pill" href="/users/{{ api_user.username }}/links.txt">Download .txt</a>
+      <button class="btn-muted" type="button" data-open-modal="scheduleCfgModal" style="margin-left: 8px;">Schedule message</button>
+    </div>
+    {% for scheme, items in link_groups.items() %}
+      <div style="margin-top: 14px; font-weight: 700;">{{ scheme | upper }} ({{ items | length }})</div>
+      {% for it in items %}
+        <div class="link-row">
+          <div class="muted" style="flex: 1; min-width: 200px;">{{ it.label }}</div>
+          <button class="btn-muted" type="button" data-copy="{{ it.url | e }}">Copy</button>
+        </div>
+        <div class="link-url">{{ it.url }}</div>
+      {% endfor %}
+    {% endfor %}
+  </div>
+
+  <div class="modal-backdrop" id="scheduleCfgModal" data-modal {% if open_cfg %}data-auto-open="1"{% endif %}>
+    <div class="modal card">
+      <div class="row" style="align-items: center;">
+        <div style="font-weight: 900; font-size: 16px;">Scheduled message & links</div>
+        <div class="spacer"></div>
+        <button class="btn-muted" type="button" data-close-modal>Close</button>
+      </div>
+
+      <div class="tabs" style="margin-top: 12px;">
+        <button class="tab active" type="button" data-tab="msg">Message</button>
+        <button class="tab" type="button" data-tab="links">VLESS links</button>
+        <div class="spacer"></div>
+        {% if schedule and schedule.enabled %}
+          <span class="pill ok">enabled</span>
+        {% elif schedule and not schedule.enabled %}
+          <span class="pill">disabled</span>
+        {% else %}
+          <span class="pill">no schedule</span>
+        {% endif %}
+        <button class="tab" type="button" data-open-modal="scheduleManageModal">Edit schedule</button>
+        {% if schedule and schedule.enabled %}
+          <form method="post" action="/users/{{ api_user.username }}/unschedule?open_cfg=1" style="margin: 0;">
+            <button class="tab" type="submit">Disable</button>
+          </form>
+        {% endif %}
+      </div>
+
+      <form method="post" action="/users/{{ api_user.username }}/schedule-config" style="margin-top: 12px;">
+        <div class="tab-panel" data-tab-panel="msg">
+          <div class="muted">Template</div>
+          <textarea name="message_template" rows="10" style="width: 100%;">{{ schedule_template }}</textarea>
+          <div class="muted" style="margin-top: 10px;">Variables</div>
+          <pre>{% for key, desc in template_vars %}{{ '{{' }}{{ key }}{{ '}}' }} - {{ desc }}{% if not loop.last %}\n{% endif %}{% endfor %}</pre>
+        </div>
+
+        <div class="tab-panel" data-tab-panel="links" style="display:none;">
+          <div class="muted">Select which VLESS configs to send after each scheduled reset. If none selected: send all.</div>
+          <div style="margin-top: 10px;">
+            {% for it in vless_items %}
+              <label class="check">
+                <input type="checkbox" name="link_keys" value="{{ it.key | e }}" {% if it.key in schedule_selected_keys or it.compat_key in schedule_selected_keys or it.legacy_key in schedule_selected_keys %}checked{% endif %} />
+                <span>{{ it.label }}</span>
+              </label>
+            {% endfor %}
+            {% if vless_items | length == 0 %}
+              <div class="muted">No VLESS links found.</div>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="row" style="margin-top: 12px;">
+          <button type="submit">Save</button>
+          <button class="btn-muted" type="submit" formaction="/users/{{ api_user.username }}/schedule-config/test">Send test to admins</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="scheduleManageModal" data-modal>
+    <div class="modal card">
+      <div class="row" style="align-items: center;">
+        <div style="font-weight: 900; font-size: 16px;">Schedule</div>
+        <div class="spacer"></div>
+        <button class="btn-muted" type="button" data-close-modal>Close</button>
+      </div>
+
+      <div style="margin-top: 12px;">
+        <div class="muted">Current</div>
+        {% if schedule and schedule.enabled %}
+          <div><span class="pill ok">enabled</span> every <b>{{ format_interval(schedule.interval_minutes) }}</b> (hh.mm)</div>
+          <div class="muted" style="margin-top: 6px;">Next: {{ format_dt(next_reset_dt, tz_name) }}</div>
+        {% elif schedule and not schedule.enabled %}
+          <div><span class="pill">disabled</span> (saved, but off)</div>
+        {% else %}
+          <div><span class="pill">-</span></div>
+        {% endif %}
+      </div>
+
+      <div style="margin-top: 14px;">
+        <div class="muted">Set schedule (hours.minutes)</div>
+        <form method="post" action="/users/{{ api_user.username }}/schedule" class="row" style="margin-top: 10px;">
+          <input name="interval" placeholder="7 یا 2.30" />
+          <button type="submit">Save</button>
+        </form>
+        <form method="post" action="/users/{{ api_user.username }}/unschedule?open_cfg=1" style="margin-top: 10px;">
+          <button class="btn-muted" type="submit">Disable</button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="muted">Inbounds</div>
+    {% if api_user.inbounds %}
+      <pre>{% for proto, tags in api_user.inbounds.items() %}{{ proto }}: {{ tags | join(', ') }}{% if not loop.last %}\n{% endif %}{% endfor %}</pre>
+    {% else %}
+      <div class="muted">-</div>
+    {% endif %}
+  </div>
+{% endblock %}

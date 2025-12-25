@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="card" style="max-width: 520px; margin: 0 auto;">
+    <div style="font-weight: 800; font-size: 18px;">Login</div>
+    <div class="muted" style="margin-top: 6px;">Sign in to manage panels and schedules.</div>
+
+    <form method="post" action="/login" style="margin-top: 14px;">
+      <div class="row">
+        <div>
+          <div class="muted">Username</div>
+          <input name="username" placeholder="admin" autofocus />
+        </div>
+      </div>
+      <div class="row" style="margin-top: 10px;">
+        <div>
+          <div class="muted">Password</div>
+          <input name="password" type="password" placeholder="••••••••" />
+        </div>
+      </div>
+      <div class="row" style="margin-top: 14px;">
+        <button type="submit">Login</button>
+        <a class="pill" href="/signup">Sign up</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}
+

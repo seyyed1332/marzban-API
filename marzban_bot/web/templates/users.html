@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="card">
+    <div class="muted">Active panel</div>
+    <div class="row" style="margin-top: 10px;">
+      {% for p in panels %}
+        {% if panel and p.id == panel.id %}
+          <span class="pill ok">{{ p.name }}</span>
+        {% else %}
+          <a class="pill" href="/panels/select/{{ p.id }}">{{ p.name }}</a>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+
+  <div class="card">
+    <form method="get" action="/users" class="row">
+      <div>
+        <div class="muted">Search</div>
+        <input name="search" value="{{ search }}" placeholder="username / note / ..." />
+      </div>
+      <div style="flex: 0 0 160px; min-width: 160px;">
+        <div class="muted">Page</div>
+        <input name="page" value="{{ page }}" />
+      </div>
+      <div style="flex: 0 0 140px; min-width: 140px;">
+        <div class="muted">&nbsp;</div>
+        <button type="submit">Load</button>
+      </div>
+      <input type="hidden" name="msg" value="" />
+    </form>
+    <div class="muted" style="margin-top: 10px;">Total: {{ total }}</div>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>Username</th>
+          <th>Status</th>
+          <th>Traffic</th>
+          <th>Expire</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+          <tr>
+            <td><a href="/users/{{ r.username }}">{{ r.username }}</a></td>
+            <td>
+              {% if r.status == "active" %}
+                <span class="pill ok">{{ r.status }}</span>
+              {% else %}
+                <span class="pill">{{ r.status }}</span>
+              {% endif %}
+            </td>
+            <td>{{ format_bytes(r.used_traffic) }} / {{ format_bytes(r.data_limit) }}</td>
+            <td>{{ format_dt(r.expire_dt, tz_name) }}</td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="pagination">
+    {% if page > 1 %}
+      <a href="/users?search={{ search }}&page={{ page - 1 }}">Prev</a>
+    {% endif %}
+    <span class="active">Page {{ page }} / {{ pages }}</span>
+    {% if page < pages %}
+      <a href="/users?search={{ search }}&page={{ page + 1 }}">Next</a>
+    {% endif %}
+  </div>
+{% endblock %}
+

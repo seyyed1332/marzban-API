@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+  <div class="card" style="max-width: 560px; margin: 0 auto;">
+    <div style="font-weight: 800; font-size: 18px;">Sign up</div>
+    {% if needs_code %}
+      <div class="muted" style="margin-top: 6px;">Signup code is required.</div>
+    {% elif open_signup %}
+      <div class="muted" style="margin-top: 6px;">First user can sign up without a code.</div>
+    {% else %}
+      <div class="muted" style="margin-top: 6px;">Signup is disabled.</div>
+    {% endif %}
+
+    <form method="post" action="/signup" style="margin-top: 14px;">
+      <div class="row">
+        <div>
+          <div class="muted">Username</div>
+          <input name="username" placeholder="admin" />
+        </div>
+      </div>
+      <div class="row" style="margin-top: 10px;">
+        <div>
+          <div class="muted">Password</div>
+          <input name="password" type="password" placeholder="Strong password" />
+        </div>
+      </div>
+      {% if needs_code %}
+        <div class="row" style="margin-top: 10px;">
+          <div>
+            <div class="muted">Signup code</div>
+            <input name="signup_code" placeholder="CODE" />
+          </div>
+        </div>
+      {% endif %}
+      <div class="row" style="margin-top: 14px;">
+        <button type="submit">Create account</button>
+        <a class="pill" href="/login">Back to login</a>
+      </div>
+    </form>
+  </div>
+{% endblock %}
+
