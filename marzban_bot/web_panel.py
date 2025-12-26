@@ -21,8 +21,8 @@ from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.sessions import SessionMiddleware
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.constants import ParseMode
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity
+from telegram.constants import MessageEntityType, ParseMode
 
 from .db import AppUser, Database, Panel
 from .formatting import format_bytes, format_dt, parse_epoch_seconds
@@ -298,6 +298,52 @@ def _chunk_text(text: str, *, max_len: int = 3800) -> list[str]:
     return [p for p in parts if p.strip()]
 
 
+def _utf16_code_units(text: str) -> int:
+    return len((text or "").encode("utf-16-le")) // 2
+
+
+def _strip_basic_markdown(text: str) -> str:
+    raw = text or ""
+    raw = raw.replace("```", "")
+    raw = raw.replace("`", "")
+    raw = raw.replace("*", "")
+    return raw
+
+
+async def _expire_telegram_messages(
+    bot: Bot,
+    *,
+    chat_id: int,
+    message_ids: list[int],
+    message_texts: list[str],
+) -> None:
+    for idx, message_id in enumerate(message_ids):
+        src = message_texts[idx] if idx < len(message_texts) else ""
+        plain = _strip_basic_markdown(src).strip()
+        if not plain:
+            plain = "منقضی شد"
+        entities = [
+            MessageEntity(
+                type=MessageEntityType.STRIKETHROUGH,
+                offset=0,
+                length=_utf16_code_units(plain),
+            )
+        ]
+        try:
+            await bot.edit_message_text(
+                chat_id=int(chat_id),
+                message_id=int(message_id),
+                text=plain,
+                entities=entities,
+            )
+            try:
+                await bot.edit_message_reply_markup(chat_id=int(chat_id), message_id=int(message_id), reply_markup=None)
+            except Exception:
+                pass
+        except Exception:
+            pass
+
+
 def _compact_one_line(text: str) -> str:
     return " ".join((text or "").split())
 
@@ -338,16 +384,36 @@ async def _send_telegram_text(
     chat_id: int,
     text: str,
     reply_markup: InlineKeyboardMarkup | None = None,
-) -> None:
+) -> list[Any]:
     parts = _chunk_text(text)
+    return await _send_telegram_parts(
+        bot,
+        chat_id=chat_id,
+        parts=parts,
+        reply_markup=reply_markup,
+        parse_mode=ParseMode.MARKDOWN,
+    )
+
+
+async def _send_telegram_parts(
+    bot: Bot,
+    *,
+    chat_id: int,
+    parts: list[str],
+    reply_markup: InlineKeyboardMarkup | None = None,
+    parse_mode: str | None = ParseMode.MARKDOWN,
+) -> list[Any]:
     last_idx = max(0, len(parts) - 1)
+    out: list[Any] = []
     for idx, part in enumerate(parts):
-        await bot.send_message(
+        msg = await bot.send_message(
             chat_id=chat_id,
             text=part,
-            parse_mode=ParseMode.MARKDOWN,
+            parse_mode=parse_mode,
             reply_markup=(reply_markup if idx == last_idx else None),
         )
+        out.append(msg)
+    return out
 
 
 def _format_links_markdown(links: list[str]) -> str:
@@ -731,6 +797,7 @@ async def _scheduler_tick(app: FastAPI) -> None:
                     last_error="No chat_id (set panel default_chat_id or bind user)",
                 )
                 continue
+            prev_msg_state = await db.get_schedule_message_state(username=sched.username, panel_id=panel.id)
 
             client = await _get_panel_client_by_app(app, panel)
             sched_cfg = await db.get_schedule_config(username=sched.username, panel_id=panel.id)
@@ -834,7 +901,34 @@ async def _scheduler_tick(app: FastAPI) -> None:
             )
 
             reply_markup = _build_telegram_info_buttons(button_templates, ctx)
-            await _send_telegram_text(bot, chat_id=int(chat_id), text=message, reply_markup=reply_markup)
+            parts = _chunk_text(message)
+            sent_messages = await _send_telegram_parts(
+                bot,
+                chat_id=int(chat_id),
+                parts=parts,
+                reply_markup=reply_markup,
+                parse_mode=ParseMode.MARKDOWN,
+            )
+            message_ids = [int(getattr(m, "message_id")) for m in sent_messages if getattr(m, "message_id", None) is not None]
+            if message_ids:
+                await db.set_schedule_message_state(
+                    username=sched.username,
+                    panel_id=panel.id,
+                    chat_id=int(chat_id),
+                    message_ids=message_ids,
+                    message_texts=parts,
+                )
+                if (
+                    prev_msg_state is not None
+                    and prev_msg_state.message_ids
+                    and (prev_msg_state.chat_id != int(chat_id) or prev_msg_state.message_ids != message_ids)
+                ):
+                    await _expire_telegram_messages(
+                        bot,
+                        chat_id=int(prev_msg_state.chat_id),
+                        message_ids=list(prev_msg_state.message_ids),
+                        message_texts=list(prev_msg_state.message_texts),
+                    )
 
             await db.mark_schedule_result(
                 username=sched.username,

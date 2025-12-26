@@ -68,6 +68,16 @@ class ScheduleConfig:
     updated_at: int
 
 
+@dataclass(frozen=True)
+class ScheduleMessageState:
+    panel_id: int
+    username: str
+    chat_id: int
+    message_ids: list[int]
+    message_texts: list[str]
+    updated_at: int
+
+
 class Database:
     def __init__(self, path: str) -> None:
         self._path = path
@@ -166,6 +176,17 @@ class Database:
               message_template TEXT,
               selected_link_keys TEXT,
               button_templates TEXT,
+              updated_at INTEGER NOT NULL,
+              PRIMARY KEY(panel_id, username),
+              FOREIGN KEY(panel_id) REFERENCES panels(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS schedule_message_states (
+              panel_id INTEGER NOT NULL,
+              username TEXT NOT NULL,
+              chat_id INTEGER NOT NULL,
+              message_ids TEXT NOT NULL,
+              message_texts TEXT NOT NULL,
               updated_at INTEGER NOT NULL,
               PRIMARY KEY(panel_id, username),
               FOREIGN KEY(panel_id) REFERENCES panels(id) ON DELETE CASCADE
@@ -800,6 +821,74 @@ class Database:
               updated_at=excluded.updated_at
             """,
             (int(panel_id), username, message_template, selected_json, buttons_json, now),
+        )
+        await self.conn.commit()
+
+    async def get_schedule_message_state(self, *, username: str, panel_id: int = 1) -> ScheduleMessageState | None:
+        cur = await self.conn.execute(
+            """
+            SELECT panel_id, username, chat_id, message_ids, message_texts, updated_at
+            FROM schedule_message_states
+            WHERE panel_id=? AND username=?
+            """,
+            (int(panel_id), username),
+        )
+        row = await cur.fetchone()
+        if row is None:
+            return None
+
+        message_ids_raw = str(row["message_ids"] or "[]")
+        message_texts_raw = str(row["message_texts"] or "[]")
+
+        message_ids: list[int] = []
+        try:
+            parsed = json.loads(message_ids_raw)
+            if isinstance(parsed, list):
+                message_ids = [int(x) for x in parsed if isinstance(x, int) or str(x).isdigit()]
+        except Exception:
+            message_ids = []
+
+        message_texts: list[str] = []
+        try:
+            parsed = json.loads(message_texts_raw)
+            if isinstance(parsed, list):
+                message_texts = [str(x or "") for x in parsed]
+        except Exception:
+            message_texts = []
+
+        return ScheduleMessageState(
+            panel_id=int(row["panel_id"]),
+            username=str(row["username"]),
+            chat_id=int(row["chat_id"]),
+            message_ids=message_ids,
+            message_texts=message_texts,
+            updated_at=int(row["updated_at"]),
+        )
+
+    async def set_schedule_message_state(
+        self,
+        *,
+        username: str,
+        panel_id: int,
+        chat_id: int,
+        message_ids: list[int],
+        message_texts: list[str],
+    ) -> None:
+        now = int(time.time())
+        ids_json = json.dumps([int(x) for x in (message_ids or [])], ensure_ascii=False)
+        texts_json = json.dumps([str(x or "") for x in (message_texts or [])], ensure_ascii=False)
+
+        await self.conn.execute(
+            """
+            INSERT INTO schedule_message_states(panel_id, username, chat_id, message_ids, message_texts, updated_at)
+            VALUES(?, ?, ?, ?, ?, ?)
+            ON CONFLICT(panel_id, username) DO UPDATE SET
+              chat_id=excluded.chat_id,
+              message_ids=excluded.message_ids,
+              message_texts=excluded.message_texts,
+              updated_at=excluded.updated_at
+            """,
+            (int(panel_id), username, int(chat_id), ids_json, texts_json, now),
         )
         await self.conn.commit()
 
