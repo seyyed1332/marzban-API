@@ -417,14 +417,24 @@ async def _send_telegram_parts(
 
 
 def _format_links_markdown(links: list[str]) -> str:
-    lines: list[str] = []
+    blocks: list[str] = []
+    idx = 0
     for link in links:
         raw = str(link or "").strip()
         if not raw:
             continue
         raw = raw.replace("`", "")
-        lines.append(f"`{raw}`")
-    return "\n".join(lines)
+        idx += 1
+        num = str(idx).translate(_PERSIAN_DIGITS)
+        scheme = _link_scheme(raw)
+        proto = scheme.upper() if scheme and scheme != "unknown" else ""
+        header = f"👇 *کانفیگ {num}*"
+        if proto:
+            header = f"{header} ({proto})"
+        blocks.append(header)
+        blocks.append(f"`{raw}`")
+        blocks.append("")
+    return "\n".join(blocks).rstrip()
 
 
 def _get_tz(tz_name: str):
